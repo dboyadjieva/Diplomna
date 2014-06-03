@@ -1,0 +1,170 @@
+<?php
+class db
+{
+	private $host;
+	private $login;
+	private $pass;
+	private $db_name;
+	private $updat_table = 'didi_update';
+	
+	public function __construct($settings)
+	{
+
+		$this->host = $settings['host'];
+		$this->login = $settings['login'];
+		$this->pass = $settings['pass'];
+		$this->db_name = $settings['db_name'];
+		$this->db_connect();
+	}
+	private function db_connect()
+	{
+		mysql_connect($this->host, $this->login, $this->pass) or 
+		
+					die("Cannot connect to $this->host");
+		
+		@mysql_query ('SET NAMES utf8');
+		
+		@mysql_query ('SET COLLATION_CONNECTION=utf8_general_ci');			
+		
+		
+		
+		mysql_select_db($this->db_name) or die("No database $this->db_name");		
+	}
+	public function mq_result($sql_query)
+	{
+		$arr=array();
+		$res=mysql_query($sql_query);
+		if (mysql_errno()!=0)
+		{
+			echo $sql_query." ";
+			echo mysql_error();
+			return array();
+		}
+		while($row=mysql_fetch_assoc($res))
+		{
+			$arr[]=$row;
+		}
+		return $arr;				
+	}	
+	public function m_q($sql_query)
+	{
+		$res=mysql_query($sql_query);
+		if (mysql_errno()!=0)
+		{
+			echo "<br/><b>$sql_query - ".mysql_error()."</b><br/>";
+			return false;
+		}
+		return $res;
+	}
+	public function isTimeForUpdate()
+	{
+		$select = "SELECT * FROM ".$this->updat_table." WHERE DATE_FORMAT(last_update, '%Y-%m-%d') <> CURDATE()";
+		$res = $this->mq_result($select);
+		if(count($res) > 0)
+		{
+			return  true;
+		}
+		return false;
+		
+	}
+	public function updateCurrentDate()
+	{
+		$this->m_q("UPDATE ".$this->updat_table." SET last_update = CURDATE()");
+	}
+	public function manageEvents($array_content,$table)
+	{
+		foreach ($array_content as $k=>$v)
+		{
+			if(!$this->isEventExist($v,$table))
+			{
+				$this->insertEvent($v,$table);
+			}
+		}
+		
+	}
+	public function isEventExist($array_content,$table)
+	{
+		$select = "SELECT * FROM $table WHERE id='{$array_content['id']}'";
+		$cnt = count($this->mq_result($select));
+		if($cnt > 0)
+		{
+			return true;
+		}
+		return false;
+	}
+	public function insertEvent($array_content,$table)
+	{
+		$insert = "INSERT INTO $table SET ";
+		$ins = '';
+		//$path = '';
+		foreach ($array_content as $k=>$v)
+		{
+			if(!is_array($v))
+			{
+				$ins.="`".$k."`='".mysql_real_escape_string($v)."',";
+				if($k == 'path')
+				{
+					$path = $v;	
+				}
+			}
+		}
+/*		if($path != '')
+		{
+			$this->manageCompetitionPath($path);
+		}*/
+
+		$insert = substr_replace($insert.$ins,'',-1);
+		$this->m_q($insert);
+		echo $insert."\n";
+	}
+	public function manageOffline($url,$json,$tip)
+	{
+		$select = "SELECT * FROM didi_offline WHERE url ='{$url}'";
+		$r = $this->mq_result($select);
+		$cnt = count($r);
+		if($cnt == 0)
+		{
+			$insert  = "INSERT INTO didi_offline SET url ='{$url}', json='".mysql_real_escape_string($json)."', tip = '{$tip}'";
+			$this->m_q($insert);
+			//echo $insert."\n";
+		}
+/*		elseif(strlen($json) >100)
+		{
+			$update  = "UPDATE didi_offline SET url ='{$url}', json='".mysql_real_escape_string($json)."', tip = '{$tip}' WHERE id='{$r[0]['id']}'";
+			$this->m_q($update);				
+		}*/
+	}
+	public function manageCompetitionPath($path)
+	{
+		$select = "SELECT * FROM didi_competition_path WHERE name_path ='{$path}'";
+		$cnt = count($this->mq_result($select));
+		if($cnt == 0)
+		{
+			$insert  = "INSERT INTO didi_competition_path SET name_path ='{$path}'";
+			$this->m_q($insert);
+			//echo $insert."\n";
+		}
+	}
+	public function getCompetitionPaths()
+	{
+		$select = "SELECT `path` FROM didi_competition_path";
+		return $this->mq_result($select);
+	}
+	public function getCompetitions()
+	{
+		$select = "SELECT * FROM didi_competitions";
+		return $this->mq_result($select);
+	}
+	public function getTeams()
+	{
+		$select = "SELECT * FROM didi_teams";
+		return $this->mq_result($select);
+	}
+	public function getOffline($url)
+	{
+		$select = "SELECT json FROM didi_offline where url = '".mysql_real_escape_string($url)."'";
+		$r = $this->mq_result($select);
+		return $r[0]['json'];
+	}
+}
+?>

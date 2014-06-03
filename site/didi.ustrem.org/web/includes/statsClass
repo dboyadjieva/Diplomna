@@ -1,0 +1,113 @@
+<?php
+class stats
+{	
+	public $settings;
+	public $db;
+	private $is_time_for_updat = false;
+	public $offline_mode = true;
+	
+    // constructor
+    public function __construct($settings,$db) 
+    {
+        $this->settings = $settings;
+        $this->db = $db;
+        $this->is_time_for_updat = $this->db->isTimeForUpdate();
+
+        if($this->is_time_for_updat)
+        {
+        	foreach ($this->settings['competitions'] as $k=>$v)
+        	{
+
+        		$competitions = $this->competitions($k);
+       			$this->db->manageEvents($competitions,'didi_competitions');
+       			$url = $this->settings['api_url'].$this->settings['competitions'][$k].'?key='.$this->settings['key'].'&type='.$k;
+       			
+
+        	}
+
+        	$teams_all = $this->db->getCompetitions();
+        	foreach ($teams_all as $k=>$v)
+        	{
+        		$teams = $this->teams($v['path'],$v['group'],$v['year']);
+        		$this->db->manageEvents($teams,'didi_teams');
+        		$table = $this->table($v['path'],$v['group'],$v['year']);
+        	}
+			$this->addOffline();
+        	$this->db->updateCurrentDate();
+        }
+        
+
+    }
+    
+    public function competitions($type)
+    {
+		$url = $this->settings['api_url'].$this->settings['competitions'][$type].'?key='.$this->settings['key'].'&type='.$type;
+		$string = file_get_contents($url);
+		$this->db->manageOffline($url,$string,'competitions');
+		return json_decode($string,true);    	
+    }
+    public function teams($competition_path,$group,$year)
+    {
+    	$url = $this->settings['api_url'].'teams.json'.'?key='.$this->settings['key'].'&competition='.$competition_path.'&group='.$group.'&year='.$year;
+    	//echo $url;
+    	//die();
+		$string = file_get_contents($url);
+		$this->db->manageOffline($url,$string,'teams');
+		return json_decode($string,true);    	
+    }
+    public function table($competition_path,$group,$year)
+    {
+    	$url = $this->settings['api_url'].'table.json'.'?key='.$this->settings['key'].'&competition='.$competition_path.'&group='.$group.'&year='.$year;
+    	//echo $url;
+    	//die();
+		$string = file_get_contents($url);
+		$this->db->manageOffline($url,$string,'table');
+		return json_decode($string,true);    	
+    }
+    public function addOffline()
+    {
+        	foreach ($this->settings['competitions'] as $k=>$v)
+        	{
+        		$competitions = $this->competitions($k);
+        		foreach ($competitions as $ki1=>$v1)
+        		{
+        			$teams = $this->teams($v1['path'],$v1['group'],$v1['year']);
+        			foreach ($teams as $k2=>$v2)
+        			{
+        				$url = $this->settings['api_url'].'results.json'.'?key='.$this->settings['key'].'&competition='.$v1['path'].'&team='.$v2['path'].'&year='.$v1['year'];
+        				$string = file_get_contents($url);
+        				$this->db->manageOffline($url,$string,'results');
+        				
+        				$url = $this->settings['api_url'].'live.json'.'?key='.$this->settings['key'].'&competition='.$v1['path'].'&team='.$v2['path'].'&year='.$v1['year'];
+        				$string = file_get_contents($url);
+        				$this->db->manageOffline($url,$string,'live');
+        				
+        				$url = $this->settings['api_url'].'top-scorers.json'.'?key='.$this->settings['key'].'&competition='.$v1['path'].'&team='.$v2['path'].'&year='.$v1['year'];
+        				$string = file_get_contents($url);
+        				$this->db->manageOffline($url,$string,'top-scorers');
+        			}
+        			
+    				$url = $this->settings['api_url'].'form.json'.'?key='.$this->settings['key'].'&competition='.$v1['path'].'&year='.$v1['year'];
+    				$string = file_get_contents($url);
+    				$this->db->manageOffline($url,$string,'form');
+        		}
+        	}
+    	$url = $this->settings['api_url'].'table.json'.'?key='.$this->settings['key'].'&competition='.$competition_path.'&group='.$group.'&year='.$year;
+    	//echo $url;
+    	//die();
+		$string = file_get_contents($url);
+		$this->db->manageOffline($url,$string,'table');
+		return json_decode($string,true);    	
+    }
+    public function getResult($url)
+    {
+    	 if($this->offline_mode)
+    	 {
+    	 	$string = $this->db->getOffline($url);
+    	 	return json_decode($string,true);
+    	 }
+ 		$string = file_get_contents($url);
+		return json_decode($string,true);    	 
+    }
+}
+?>
